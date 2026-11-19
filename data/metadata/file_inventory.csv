@@ -1,0 +1,10 @@
+file_name,relative_path,extension,size_bytes,size_mb
+IA.txt,data\raw\cafa5\IA.txt,.txt,1068575,1.019
+sample_submission.tsv,data\raw\cafa5\sample_submission.tsv,.tsv,6817416,6.502
+bundle.complete,data\raw\cafa5\.complete\competitions\cafa-5-protein-function-prediction\bundle.complete,.complete,0,0.0
+testsuperset-taxon-list.tsv,data\raw\cafa5\Test (Targets)\testsuperset-taxon-list.tsv,.tsv,3853,0.004
+testsuperset.fasta,data\raw\cafa5\Test (Targets)\testsuperset.fasta,.fasta,72174335,68.831
+go-basic.obo,data\raw\cafa5\Train\go-basic.obo,.obo,30992530,29.557
+train_sequences.fasta,data\raw\cafa5\Train\train_sequences.fasta,.fasta,97263064,92.757
+train_taxonomy.tsv,data\raw\cafa5\Train\train_taxonomy.tsv,.tsv,1835615,1.751
+train_terms.tsv,data\raw\cafa5\Train\train_terms.tsv,.tsv,119091574,113.575
