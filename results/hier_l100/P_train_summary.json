@@ -1,0 +1,33 @@
+{
+  "experiment": "hier_l100",
+  "aspect": "P",
+  "best_epoch": 60,
+  "epochs_run": 64,
+  "val_metrics_at_best": {
+    "epoch": 60,
+    "train_loss": 0.00599609904158796,
+    "train_bce_loss": 0.00595662576085195,
+    "train_hier_loss": 3.9473281928148244e-07,
+    "val_loss": 0.0067397730114559335,
+    "val_fmax": 0.4205479924190737,
+    "val_precision": 0.4358367441099046,
+    "val_recall": 0.40629551968139316,
+    "val_best_threshold": 0.2199999988079071,
+    "val_violation_rate": 0.1357576219212816,
+    "val_violation_rate_gt001": 8.266920720283871e-05,
+    "val_mean_violation_mag": 7.392695804319845e-06,
+    "val_wfmax": 0.3532409563383642,
+    "val_wfmax_threshold": 0.18000000715255737,
+    "train_time_sec": 4.29505181312561,
+    "epoch_time_sec": 8.226655721664429
+  },
+  "train_time_total_sec": 678.6914141178131,
+  "peak_gpu_mem_gb": 1.702959616,
+  "num_train": 73804,
+  "num_valid": 18406,
+  "K": 20584,
+  "checkpoint": "checkpoints\\hier_l100_P_best.pt",
+  "config_hash": "8eef33a30645d881",
+  "vocab_hash": "62537d34ba7e1f49",
+  "protocol": "internal_validation (vocab-restricted, model selection)"
+}

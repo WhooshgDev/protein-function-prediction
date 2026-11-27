@@ -1,0 +1,53 @@
+{
+  "sample_size": 500,
+  "mean_length": 570.63,
+  "embedder": {
+    "esm_name": "facebook/esm2_t30_150M_UR50D",
+    "hidden_dim": 640,
+    "dtype": "float16",
+    "device": "cuda",
+    "device_name": "NVIDIA GeForce RTX 5080",
+    "max_length": 1022,
+    "max_length_policy": "chunk",
+    "chunk_overlap": 256,
+    "chunk_aggregation": "residue-count-weighted mean of window means",
+    "pooling": "mean over residue tokens (BOS/EOS/PAD excluded)",
+    "max_tokens_per_batch": 48000,
+    "torch_version": "2.11.0+cu128",
+    "transformers_version": "5.24.1",
+    "tokenizer_class": "EsmTokenizer"
+  },
+  "results": [
+    {
+      "max_tokens_per_batch": 8000,
+      "seq_per_sec": 182.31070986923174,
+      "res_per_sec": 104031.96037267972,
+      "peak_vram_gb": 0.519851008
+    },
+    {
+      "max_tokens_per_batch": 16000,
+      "seq_per_sec": 162.86473289751083,
+      "res_per_sec": 92935.50253330662,
+      "peak_vram_gb": 0.729080832
+    },
+    {
+      "max_tokens_per_batch": 24000,
+      "seq_per_sec": 150.43224436746678,
+      "res_per_sec": 85841.15160340758,
+      "peak_vram_gb": 0.938846208
+    },
+    {
+      "max_tokens_per_batch": 32000,
+      "seq_per_sec": 145.8084093997822,
+      "res_per_sec": 83202.65265579772,
+      "peak_vram_gb": 1.155623424
+    },
+    {
+      "max_tokens_per_batch": 48000,
+      "seq_per_sec": 141.16524439136003,
+      "res_per_sec": 80553.12340704178,
+      "peak_vram_gb": 1.563700736
+    }
+  ],
+  "created_at": "2026-11-27T10:17:54.652969+00:00"
+}

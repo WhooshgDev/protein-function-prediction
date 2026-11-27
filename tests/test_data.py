@@ -43,3 +43,34 @@ def test_taxonomy_unk_handling():
     assert mapped[0] == vocab[9606]
     assert mapped[1] == UNK_TAXON_INDEX
     assert mapped[2] == UNK_TAXON_INDEX
+
+
+def test_fasta_header_field_and_sparse_batch_loader(tmp_path: Path):
+    import numpy as np
+    from scipy import sparse
+    from src.data.dataset import SparseBatchLoader
+    from src.data.preprocessing import parse_fasta_header_field
+
+    fa = tmp_path / "t.fasta"
+    fa.write_text(">Q1\t9606\nMKV\n>Q2\t10090\nMKA\n", encoding="utf-8")
+    assert parse_fasta_header_field(fa) == {"Q1": "9606", "Q2": "10090"}
+
+    rng = np.random.default_rng(0)
+    y = sparse.random(37, 11, density=0.2, format="csr", random_state=0)
+    y.data[:] = 1.0
+    x = rng.random((37, 4)).astype(np.float32)
+    loader = SparseBatchLoader(x, y, np.arange(37), batch_size=8, shuffle=True, device="cpu")
+    seen = []
+    for b in loader:
+        idx = b["index"]
+        assert np.allclose(b["labels"].numpy(), y[idx].toarray())
+        assert np.allclose(b["embedding"].numpy(), x[idx])
+        assert (b["taxonomy_idx"].numpy() == idx).all()
+        seen.extend(idx.tolist())
+    assert sorted(seen) == list(range(37)) and len(loader) == 5
+
+
+def test_annotation_parser_header_detection(tmp_path: Path):
+    tsv = tmp_path / "t.tsv"
+    tsv.write_text("P1\tGO:0003674\tMFO\n", encoding="utf-8")  # no header row
+    assert parse_annotations(tsv) == [("P1", "GO:0003674", "MFO")]

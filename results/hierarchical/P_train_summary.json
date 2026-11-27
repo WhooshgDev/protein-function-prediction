@@ -1,0 +1,33 @@
+{
+  "experiment": "hierarchical",
+  "aspect": "P",
+  "best_epoch": 116,
+  "epochs_run": 126,
+  "val_metrics_at_best": {
+    "epoch": 116,
+    "train_loss": 0.005304212180839587,
+    "train_bce_loss": 0.005289042197735045,
+    "train_hier_loss": 1.5169981615991487e-05,
+    "val_loss": 0.006919779374988543,
+    "val_fmax": 0.43684081582745765,
+    "val_precision": 0.4576277857074333,
+    "val_recall": 0.4178602204864967,
+    "val_best_threshold": 0.2199999988079071,
+    "val_violation_rate": 0.1712817863121787,
+    "val_violation_rate_gt001": 0.0005510713439276561,
+    "val_mean_violation_mag": 3.1718261003499626e-05,
+    "val_wfmax": 0.3708758753010484,
+    "val_wfmax_threshold": 0.18000000715255737,
+    "train_time_sec": 11.393039464950562,
+    "epoch_time_sec": 16.384665727615356
+  },
+  "train_time_total_sec": 2306.4460639953613,
+  "peak_gpu_mem_gb": 1.702959616,
+  "num_train": 73804,
+  "num_valid": 18406,
+  "K": 20584,
+  "checkpoint": "checkpoints\\hierarchical_P_best.pt",
+  "config_hash": "c7f6794c14c8d1d9",
+  "vocab_hash": "62537d34ba7e1f49",
+  "protocol": "internal_validation (vocab-restricted, model selection)"
+}

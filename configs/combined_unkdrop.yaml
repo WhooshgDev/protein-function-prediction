@@ -1,0 +1,66 @@
+experiment_name: combined_unkdrop
+seed: 42
+data:
+  raw_dir: data/raw
+  raw_files:
+    train_sequences: Train/train_sequences.fasta
+    train_terms: Train/train_terms.tsv
+    train_taxonomy: Train/train_taxonomy.tsv
+    obo: Train/go-basic.obo
+    test_sequences: Test (Targets)/testsuperset.fasta
+    test_taxon_list: Test (Targets)/testsuperset-taxon-list.tsv
+    ia: IA.txt
+    sample_submission: sample_submission.tsv
+  processed_dir: data/processed
+  embedding_dir: data/embeddings
+  subset: null              # int -> use only the first N proteins (smoke tests)
+  split: cluster            # cluster = MMseqs2 if on PATH else MinHash-LSH; or minhash|mmseqs|sequence|random
+  val_ratio: 0.2
+  clustering:
+    kmer_size: 5
+    num_hashes: 64
+    bands: 16
+    mmseqs_min_seq_id: 0.3
+    mmseqs_coverage: 0.8
+  ontology:
+    relations: [is_a, part_of]
+  min_term_count: 1         # keep every term seen in the train split (plan: do not drop rare terms)
+model:
+  esm_name: facebook/esm2_t30_150M_UR50D
+  freeze_esm: true
+  pooling: mean_residue
+  max_length: 1022          # residues per ESM window (1024 tokens incl. BOS/EOS)
+  max_length_policy: chunk  # chunk = overlapping windows, residue-weighted mean; or truncate
+  chunk_overlap: 256
+  hidden_dim: 512
+  dropout: 0.3
+embedding:
+  dtype: float16
+  max_tokens_per_batch: 8000    # chosen from results/embedding_benchmark.json
+  shard_size: 10000
+training:
+  optimizer: adamw
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  batch_size: 256
+  epochs: 150               # template: 20 (models still improving). Early stopping decides.
+  early_stopping_patience: 10  # template: 4 (stopped runs on a noisy plateau; see PROGRESS.md step 10)
+loss:
+  type: bce_with_logits
+  hierarchical_lambda: 1.0   # selected on validation from {0.01,0.1,1,10,100,1000} (see PROGRESS.md)
+taxonomy:
+  enabled: true
+  embedding_dim: 64
+  fusion_type: concat
+  min_count: 1
+  unk_dropout: 0.1        # E2b/E3b: train the UNK row (see PROGRESS.md step 11)
+evaluation:
+  aspects: [F, P, C]
+  threshold_min: 0.01
+  threshold_max: 0.99
+  threshold_steps: 99
+export:
+  min_score: 0.01
+  max_terms_per_protein: 1500   # CAFA 5 limit, applied across all three aspects
+  sep: "	"
+  float_format: 3

@@ -12,6 +12,7 @@ def get_logger(
     """Create and configure a standard logger."""
     logger = logging.getLogger(name)
     logger.setLevel(level)
+    logger.propagate = False  # third-party libs (cafaeval) install root handlers -> avoid duplicates
     if logger.handlers:
         return logger
 

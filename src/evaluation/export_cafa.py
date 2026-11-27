@@ -26,6 +26,7 @@ def export_predictions(
     min_score = float(cfg.get("min_score", 0.001))
     max_terms = int(cfg.get("max_terms_per_protein", 1500))
     sep = str(cfg.get("sep", "\t"))
+    float_format = int(cfg.get("float_format", 4))
 
     if len(protein_ids) != scores.shape[0]:
         raise ValueError(f"protein_ids length ({len(protein_ids)}) != scores rows ({scores.shape[0]})")
@@ -64,7 +65,7 @@ def export_predictions(
                     continue
                 seen_pairs.add((pid, go_id))
                 proteins_with_predictions.add(pid)
-                f.write(f"{pid}{sep}{go_id}{sep}{val:.4f}\n")
+                f.write(f"{pid}{sep}{go_id}{sep}{val:.{float_format}f}\n")
                 num_rows_written += 1
 
     return {
@@ -72,4 +73,111 @@ def export_predictions(
         "num_target_proteins": len(protein_ids),
         "num_covered_proteins": len(proteins_with_predictions),
         "num_rows_written": num_rows_written,
+    }
+
+
+class StreamingCafaWriter:
+    """Write CAFA rows protein-by-protein with schema checks (plan §11).
+
+    Format matches ``sample_submission.tsv``: no header, ``protein<TAB>GO<TAB>score``.
+    Guarantees: GO IDs match ``GO:`` + 7 digits, scores finite in [0, 1], no duplicate (protein, GO) pairs,
+    every target protein gets at least one row.
+    """
+
+    def __init__(self, output_path: Union[str, Path], sep: str = "\t", float_format: int = 3):
+        self.path = Path(output_path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.tmp = self.path.with_suffix(self.path.suffix + ".tmp")
+        self.f = open(self.tmp, "w", encoding="utf-8", newline="\n")
+        self.sep = sep
+        self.fmt = f"{{:.{int(float_format)}f}}"
+        self.rows = 0
+        self.proteins: Set[str] = set()
+
+    def write_protein(self, pid: str, go_ids: List[str], scores: np.ndarray) -> None:
+        if pid in self.proteins:
+            raise ValueError(f"Protein {pid} written twice (rows must be grouped per protein)")
+        if len(go_ids) != len(scores) or len(go_ids) == 0:
+            raise ValueError(f"Protein {pid}: need >=1 (GO, score) pair")
+        if len(set(go_ids)) != len(go_ids):
+            raise ValueError(f"Duplicate GO IDs for {pid}")
+        scores = np.asarray(scores, dtype=np.float64)
+        if not np.isfinite(scores).all() or (scores < 0).any() or (scores > 1).any():
+            raise ValueError(f"Scores for {pid} outside [0, 1] or non-finite")
+        sep, fmt = self.sep, self.fmt
+        self.f.write("".join(f"{pid}{sep}{g}{sep}{fmt.format(s)}\n" for g, s in zip(go_ids, scores)))
+        self.rows += len(go_ids)
+        self.proteins.add(pid)
+
+    def close(self) -> Dict[str, Any]:
+        self.f.close()
+        self.tmp.replace(self.path)
+        return {"output_path": str(self.path), "num_rows_written": self.rows,
+                "num_covered_proteins": len(self.proteins)}
+
+
+def validate_submission(
+    path: Union[str, Path],
+    expected_ids: Optional[List[str]] = None,
+    valid_go_ids: Optional[Set[str]] = None,
+    sep: str = "\t",
+    max_terms_per_protein: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Read a submission back line by line and verify schema, ranges, duplicates and coverage."""
+    n_rows = 0
+    seen_proteins: Set[str] = set()
+    current, current_terms = None, set()
+    errors: List[str] = []
+    max_terms_seen = 0
+    min_s, max_s = 1.0, 0.0
+
+    def _close_block():
+        nonlocal max_terms_seen
+        max_terms_seen = max(max_terms_seen, len(current_terms))
+        if max_terms_per_protein and len(current_terms) > max_terms_per_protein:
+            errors.append(f"{current}: {len(current_terms)} terms > limit")
+
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            parts = line.rstrip("\n").split(sep)
+            n_rows += 1
+            if len(parts) != 3:
+                errors.append(f"line {n_rows}: expected 3 columns")
+                continue
+            pid, go, sc = parts
+            if pid != current:
+                if current is not None:
+                    _close_block()
+                if pid in seen_proteins:
+                    errors.append(f"{pid}: rows not contiguous")
+                seen_proteins.add(pid)
+                current, current_terms = pid, set()
+            if go in current_terms:
+                errors.append(f"duplicate pair {pid} {go}")
+            current_terms.add(go)
+            if not GO_ID_PATTERN.match(go) or (valid_go_ids is not None and go not in valid_go_ids):
+                errors.append(f"invalid GO id {go}")
+            s = float(sc)
+            if not (0.0 <= s <= 1.0):
+                errors.append(f"score out of range {pid} {go} {sc}")
+            min_s, max_s = min(min_s, s), max(max_s, s)
+            if len(errors) > 50:
+                break
+    if current is not None:
+        _close_block()
+    missing = 0
+    unexpected = 0
+    if expected_ids is not None:
+        exp = set(expected_ids)
+        missing = len(exp - seen_proteins)
+        unexpected = len(seen_proteins - exp)
+        if missing:
+            errors.append(f"{missing} target proteins missing")
+        if unexpected:
+            errors.append(f"{unexpected} unexpected proteins")
+    return {
+        "path": str(path), "num_rows": n_rows, "num_proteins": len(seen_proteins),
+        "missing_targets": missing, "unexpected_proteins": unexpected,
+        "max_terms_per_protein_seen": max_terms_seen, "score_min": min_s, "score_max": max_s,
+        "valid": not errors, "errors": errors[:50],
     }

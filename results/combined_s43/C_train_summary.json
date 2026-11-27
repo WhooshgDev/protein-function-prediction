@@ -1,0 +1,33 @@
+{
+  "experiment": "combined_s43",
+  "aspect": "C",
+  "best_epoch": 64,
+  "epochs_run": 74,
+  "val_metrics_at_best": {
+    "epoch": 64,
+    "train_loss": 0.006123186170709194,
+    "train_bce_loss": 0.006100735390283603,
+    "train_hier_loss": 2.245076367651257e-05,
+    "val_loss": 0.0077308786689843,
+    "val_fmax": 0.7441893001892206,
+    "val_precision": 0.778950409634064,
+    "val_recall": 0.7123981246865785,
+    "val_best_threshold": 0.4000000059604645,
+    "val_violation_rate": 0.11580316332326893,
+    "val_violation_rate_gt001": 0.0009498368685833547,
+    "val_mean_violation_mag": 5.843494439550166e-05,
+    "val_wfmax": 0.6073358309278097,
+    "val_wfmax_threshold": 0.3499999940395355,
+    "train_time_sec": 3.2698919773101807,
+    "epoch_time_sec": 4.420939683914185
+  },
+  "train_time_total_sec": 259.26687002182007,
+  "peak_gpu_mem_gb": 0.45473024,
+  "num_train": 74317,
+  "num_valid": 18595,
+  "K": 2872,
+  "checkpoint": "checkpoints\\combined_s43_C_best.pt",
+  "config_hash": "10152b7d30491cfc",
+  "vocab_hash": "1a710d96aa944c89",
+  "protocol": "internal_validation (vocab-restricted, model selection)"
+}

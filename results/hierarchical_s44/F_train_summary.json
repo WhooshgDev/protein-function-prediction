@@ -1,0 +1,33 @@
+{
+  "experiment": "hierarchical_s44",
+  "aspect": "F",
+  "best_epoch": 115,
+  "epochs_run": 125,
+  "val_metrics_at_best": {
+    "epoch": 115,
+    "train_loss": 0.0018477209851266892,
+    "train_bce_loss": 0.0018320085208226994,
+    "train_hier_loss": 1.5712464559091894e-05,
+    "val_loss": 0.0026368846447439864,
+    "val_fmax": 0.744889756473902,
+    "val_precision": 0.7830857635039709,
+    "val_recall": 0.7102465738346445,
+    "val_best_threshold": 0.36000001430511475,
+    "val_violation_rate": 0.2596821049663993,
+    "val_violation_rate_gt001": 0.00046171119087460834,
+    "val_mean_violation_mag": 3.4440814182896445e-05,
+    "val_wfmax": 0.6463444109549723,
+    "val_wfmax_threshold": 0.33000001311302185,
+    "train_time_sec": 2.869062662124634,
+    "epoch_time_sec": 4.09383749961853
+  },
+  "train_time_total_sec": 431.0156605243683,
+  "peak_gpu_mem_gb": 0.612929536,
+  "num_train": 62801,
+  "num_valid": 15836,
+  "K": 6835,
+  "checkpoint": "checkpoints\\hierarchical_s44_F_best.pt",
+  "config_hash": "3bd46d6c5d960641",
+  "vocab_hash": "dc3ca3d48a10bc08",
+  "protocol": "internal_validation (vocab-restricted, model selection)"
+}

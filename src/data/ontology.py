@@ -22,6 +22,7 @@ class GOTerm:
     is_obsolete: bool = False
     replaced_by: List[str] = field(default_factory=list)
     consider: List[str] = field(default_factory=list)
+    alt_ids: List[str] = field(default_factory=list)
     parents: List[Tuple[str, str]] = field(default_factory=list)  # (parent_go_id, relation_type)
 
 
@@ -31,6 +32,9 @@ class GOOntology:
     def __init__(self, allowed_relations: Tuple[str, ...] = ("is_a", "part_of")):
         self.allowed_relations = set(allowed_relations)
         self.terms: Dict[str, GOTerm] = {}
+        self.alt_id_map: Dict[str, str] = {}
+        self.data_version: str = ""
+        self._ancestor_cache: Dict[str, frozenset] = {}
 
     def parse_obo(self, obo_path: Union[str, Path]) -> None:
         """Parse go-basic.obo file into GOTerm records."""
@@ -39,6 +43,8 @@ class GOOntology:
         with open(obo_path, "r", encoding="utf-8") as f:
             for raw_line in f:
                 line = raw_line.strip()
+                if current_term is None and line.startswith("data-version:"):
+                    self.data_version = line.split(":", 1)[1].strip()
                 if line == "[Term]":
                     if current_term is not None and current_term.go_id:
                         self.terms[current_term.go_id] = current_term
@@ -63,6 +69,8 @@ class GOOntology:
                         current_term.replaced_by.append(val)
                     elif key == "consider":
                         current_term.consider.append(val)
+                    elif key == "alt_id":
+                        current_term.alt_ids.append(val)
                     elif key == "is_a":
                         if "is_a" in self.allowed_relations:
                             current_term.parents.append((val, "is_a"))
@@ -75,10 +83,18 @@ class GOOntology:
 
         if current_term is not None and current_term.go_id:
             self.terms[current_term.go_id] = current_term
+        for go_id, term in self.terms.items():
+            for alt in term.alt_ids:
+                if alt not in self.terms:
+                    self.alt_id_map[alt] = go_id
+        self._ancestor_cache = {}
 
     def resolve_term(self, go_id: str) -> Optional[str]:
         """Resolve a GO ID, handling obsolete terms with single unambiguous replaced_by."""
         term = self.terms.get(go_id)
+        if term is None and go_id in self.alt_id_map:
+            go_id = self.alt_id_map[go_id]
+            term = self.terms.get(go_id)
         if term is None:
             return None
         if not term.is_obsolete:
@@ -95,6 +111,8 @@ class GOOntology:
         resolved = self.resolve_term(go_id)
         if resolved is None:
             return set()
+        if same_aspect_only and resolved in self._ancestor_cache:
+            return set(self._ancestor_cache[resolved])
         root_aspect = self.terms[resolved].aspect
         visited: Set[str] = set()
         stack: List[str] = [resolved]
@@ -113,7 +131,30 @@ class GOOntology:
                 if same_aspect_only and self.terms[p_resolved].aspect != root_aspect:
                     continue
                 stack.append(p_resolved)
+        if same_aspect_only:
+            self._ancestor_cache[resolved] = frozenset(visited)
         return visited
+
+    def propagate(self, go_ids: Set[str]) -> Set[str]:
+        """Close a set of GO IDs under the allowed relations (same-aspect ancestors). Idempotent."""
+        out: Set[str] = set()
+        for go_id in go_ids:
+            out |= self.get_ancestors(go_id)
+        return out
+
+    def find_cycles(self) -> int:
+        """Return number of nodes participating in a cycle of allowed relations (0 for a valid DAG)."""
+        import networkx as nx
+
+        g = nx.DiGraph()
+        for go_id, term in self.terms.items():
+            if term.is_obsolete:
+                continue
+            for parent_id, _ in term.parents:
+                g.add_edge(go_id, parent_id)
+        if nx.is_directed_acyclic_graph(g):
+            return 0
+        return sum(len(c) for c in nx.strongly_connected_components(g) if len(c) > 1)
 
     def build_aspect_vocabulary(self, aspect: str, observed_terms: Optional[Set[str]] = None) -> Dict[str, int]:
         """Build deterministic lexicographically sorted GO-ID -> index mapping for an aspect."""
@@ -125,23 +166,33 @@ class GOOntology:
         sorted_terms = sorted(candidates)
         return {go_id: idx for idx, go_id in enumerate(sorted_terms)}
 
-    def build_go_edges(self, vocab: Dict[str, int], aspect: str) -> np.ndarray:
-        """Build parent-to-child edge index array of shape (E, 2) where col 0 = parent_idx, col 1 = child_idx."""
-        edges: List[Tuple[int, int]] = []
+    def build_go_edges(
+        self, vocab: Dict[str, int], aspect: str, return_relations: bool = False
+    ) -> Union[np.ndarray, Tuple[np.ndarray, List[str]]]:
+        """Build parent-to-child edge index array of shape (E, 2) where col 0 = parent_idx, col 1 = child_idx.
+
+        Only direct edges whose both endpoints are in ``vocab`` are kept. With
+        ``return_relations=True`` the relation type of each edge is returned as well.
+        """
+        edge_rel: Dict[Tuple[int, int], str] = {}
         for child_go, child_idx in vocab.items():
             term = self.terms.get(child_go)
             if term is None or term.aspect != aspect:
                 continue
-            for parent_go, _ in term.parents:
+            for parent_go, rel in term.parents:
                 p_resolved = self.resolve_term(parent_go)
                 if p_resolved in vocab:
                     parent_idx = vocab[p_resolved]
                     if parent_idx != child_idx:
-                        edges.append((parent_idx, child_idx))
-        edges = sorted(set(edges))
-        if not edges:
-            return np.zeros((0, 2), dtype=np.int64)
-        return np.array(edges, dtype=np.int64)
+                        key = (parent_idx, child_idx)
+                        # is_a wins over part_of if both exist for the same pair
+                        if key not in edge_rel or rel == "is_a":
+                            edge_rel[key] = rel
+        keys = sorted(edge_rel)
+        arr = np.array(keys, dtype=np.int64) if keys else np.zeros((0, 2), dtype=np.int64)
+        if return_relations:
+            return arr, [edge_rel[k] for k in keys]
+        return arr
 
 
 def build_sparse_label_matrix(
