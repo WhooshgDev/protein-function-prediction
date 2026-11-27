@@ -52,3 +52,17 @@ htmlcov/
 *.swp
 .DS_Store
 Thumbs.db
+
+# Smoke-run artifacts
+data/smoke/
+
+# Keep small, human-readable results under version control
+!results/REPORT.md
+!results/experiment_table.md
+!results/experiment_table.json
+!results/embedding_benchmark.json
+!results/*/
+results/*/*
+!results/*/*_train_summary.json
+!results/*/*_learning_curve.png
+!results/*/eval_*.json

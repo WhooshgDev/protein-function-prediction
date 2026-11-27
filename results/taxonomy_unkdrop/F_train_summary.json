@@ -1,0 +1,33 @@
+{
+  "experiment": "taxonomy_unkdrop",
+  "aspect": "F",
+  "best_epoch": 74,
+  "epochs_run": 84,
+  "val_metrics_at_best": {
+    "epoch": 74,
+    "train_loss": 0.001820078578198374,
+    "train_bce_loss": 0.001820078578198374,
+    "train_hier_loss": 0.0,
+    "val_loss": 0.0026145966548938304,
+    "val_fmax": 0.7457171166407758,
+    "val_precision": 0.7883531515200407,
+    "val_recall": 0.7074561843500358,
+    "val_best_threshold": 0.33000001311302185,
+    "val_violation_rate": 0.24373063049206373,
+    "val_violation_rate_gt001": 0.0005175546183459293,
+    "val_mean_violation_mag": 4.315434731446337e-05,
+    "val_wfmax": 0.6445726433668879,
+    "val_wfmax_threshold": 0.33000001311302185,
+    "train_time_sec": 3.919069528579712,
+    "epoch_time_sec": 5.832494735717773
+  },
+  "train_time_total_sec": 356.40414929389954,
+  "peak_gpu_mem_gb": 0.5552,
+  "num_train": 62801,
+  "num_valid": 15836,
+  "K": 6835,
+  "checkpoint": "checkpoints\\taxonomy_unkdrop_F_best.pt",
+  "config_hash": "b7a8f0f041d3ff16",
+  "vocab_hash": "dc3ca3d48a10bc08",
+  "protocol": "internal_validation (vocab-restricted, model selection)"
+}

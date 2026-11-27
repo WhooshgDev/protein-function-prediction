@@ -1,125 +1,184 @@
 # PFP-CAFA5: Protein Function Prediction Pipeline
 
-An end-to-end machine learning pipeline for **Protein Function Prediction (PFP)** on the **CAFA 5** dataset. Given an amino acid sequence (and optional NCBI taxonomy ID), the system predicts Gene Ontology (GO) terms across all three ontology aspects:
-- **MF** — Molecular Function (`F`)
-- **BP** — Biological Process (`P`)
-- **CC** — Cellular Component (`C`)
+An end-to-end pipeline for **Protein Function Prediction (PFP)** on the **CAFA 5** dataset. Given an
+amino-acid sequence (and optionally its NCBI taxonomy ID), it predicts Gene Ontology (GO) terms in all
+three aspects: **MF** (`F`), **BP** (`P`), **CC** (`C`).
+
+Frozen ESM-2 150M embeddings → per-aspect MLP, with two optional improvements: a GO-hierarchy
+violation penalty and a learned taxonomy embedding.
+
+> Results, discoveries and design decisions are logged step by step in [PROGRESS.md](PROGRESS.md);
+> the experiment comparison is in [results/REPORT.md](results/REPORT.md).
 
 ---
 
-## Experiment Matrix
-| Experiment ID | Model Variant | Description | Config File |
-| :--- | :--- | :--- | :--- |
-| **E0** | Baseline | Frozen ESM-2 (150M) + Mean Residue Pooling + MLP + BCE | `configs/baseline.yaml` |
-| **E1** | Hierarchical Loss | Baseline + GO DAG Parent–Child Violation Penalty | `configs/hierarchical.yaml` |
-| **E2** | Taxonomy Embedding | Baseline + Learned NCBI Taxonomy Embedding Fusion | `configs/taxonomy.yaml` |
-| **E3** | Full Combined | Baseline + Hierarchical Loss + Taxonomy Embedding | `configs/combined.yaml` |
+## Experiment matrix
+
+| ID | Variant | What changes | Config |
+|---|---|---|---|
+| **E0** | Baseline | Frozen ESM-2 (150M) + residue mean pooling + MLP + BCE | `configs/baseline.yaml` |
+| **E1** | Hierarchical loss | E0 + λ·mean(max(0, s_child − s_parent)²) | `configs/hierarchical.yaml` |
+| **E2** | Taxonomy embedding | E0 + learned NCBI taxon embedding (64-d, UNK index 0) concatenated before the MLP | `configs/taxonomy.yaml` |
+| **E3** | Combined | E1 + E2 | `configs/combined.yaml` |
+
+All four configs are identical except `loss.hierarchical_lambda` and `taxonomy.enabled`.
 
 ---
 
-## Repository Structure
+## Setup (uv)
+
+Requires [uv](https://docs.astral.sh/uv/). PyTorch is pulled from the CUDA 12.8 index (needed for
+RTX 50-series / Blackwell GPUs); exact versions are locked in `uv.lock`.
+
+```powershell
+uv sync
+```
+
+```powershell
+uv run python -c "import torch; print(torch.cuda.is_available())"
+```
+
+`requirements.txt` is kept for pip users, but `pyproject.toml` + `uv.lock` are the source of truth.
+
+### Raw data (`data/raw/`)
+
+Download the CAFA 5 Kaggle data and keep its layout:
+
 ```text
-PFP-CAFA5/
-├── configs/
-│   ├── baseline.yaml           # E0: Baseline configuration
-│   ├── hierarchical.yaml       # E1: GO hierarchical penalty enabled
-│   ├── taxonomy.yaml           # E2: Taxonomy embedding enabled
-│   └── combined.yaml           # E3: Full combined model
-├── data/
-│   ├── raw/                    # Raw CAFA 5 dataset files (ignored by Git)
-│   ├── processed/              # Cleaned IDs, GO vocabularies, sparse CSR label matrices, split manifest
-│   └── embeddings/             # Cached ESM-2 embeddings (.npy / shards)
-├── src/
-│   ├── data/
-│   │   ├── preprocessing.py    # FASTA & annotation TSV parsers, canonical ID normalization, QC stats
-│   │   ├── ontology.py         # GO OBO parser, obsolete term resolution, ancestor propagation, CSR matrices
-│   │   ├── split.py            # Sequence/cluster-based train/val split & leakage auditing
-│   │   ├── dataset.py          # PyTorch Dataset with on-the-fly sparse-to-dense minibatch label loading
-│   │   └── taxonomy.py         # NCBI Taxonomy ID parser, deterministic vocabulary & UNK handling
-│   ├── models/
-│   │   ├── esm_encoder.py      # Frozen ESM-2 (150M) residue-only mean pooling (excluding BOS/EOS/PAD)
-│   │   ├── classifier.py       # Baseline MLP head returning raw logits
-│   │   ├── hierarchical_loss.py# BCEWithLogitsLoss + GO hierarchy violation penalty & diagnostics
-│   │   ├── taxonomy_encoder.py # Learned taxonomy embedding with reserved UNK index
-│   │   └── fusion.py           # Sequence + Taxonomy feature concatenation/fusion module
-│   ├── training/
-│   │   ├── trainer.py          # Training loop, AdamW, early stopping on validation Fmax, checkpointing
-│   │   └── train.py            # High-level training runner
-│   ├── evaluation/
-│   │   ├── metrics.py          # Threshold sweep for protein-centric Precision, Recall, F1, and Fmax
-│   │   ├── predict.py          # Batched inference with sigmoid probability output
-│   │   ├── export_cafa.py      # CAFA submission formatter & schema validator
-│   │   └── evaluate_cafa.py    # Official CAFA evaluator wrapper & smoke test runner
-│   └── utils/
-│       ├── config.py           # YAML configuration loader & SHA-256 config fingerprinting
-│       ├── seed.py             # Deterministic seeding across Python, NumPy, and PyTorch
-│       ├── logger.py           # Standardized console & file logging
-│       └── io.py               # Atomic JSON writes & file/list SHA-256 hashing
-├── scripts/
-│   ├── prepare_data.py         # Step 1: Data ingestion, ontology processing, label matrix & split creation
-│   ├── extract_embeddings.py   # Step 2: Frozen ESM-2 embedding extraction & caching
-│   ├── train.py                # Step 3: Model training per GO aspect (F, P, C)
-│   ├── predict.py              # Step 4: Checkpoint inference & prediction export
-│   ├── evaluate.py             # Step 5: Internal validation Fmax & CAFA evaluator execution
-│   └── run_pipeline.py         # Step 6: End-to-end pipeline execution
-├── tests/                      # Unit and integration tests
-├── checkpoints/                # Saved model checkpoints (ignored by Git)
-├── predictions/                # Exported prediction files (ignored by Git)
-├── results/                    # Evaluation metrics, learning curves, and audit reports
-├── logs/                       # Execution logs
-├── README.md
-├── requirements.txt
-└── .gitignore
+data/raw/
+├── Train/
+│   ├── train_sequences.fasta
+│   ├── train_terms.tsv          # EntryID, term, aspect (BPO/MFO/CCO)
+│   ├── train_taxonomy.tsv       # EntryID, taxonomyID
+│   └── go-basic.obo
+├── Test (Targets)/
+│   ├── testsuperset.fasta       # header: ">ID<TAB>taxonID"
+│   └── testsuperset-taxon-list.tsv
+├── IA.txt
+└── sample_submission.tsv        # no header: protein<TAB>GO<TAB>score
+```
+
+Paths are configurable under `data.raw_files` in each config. Raw data, embeddings, checkpoints,
+predictions and logs are git-ignored; everything is regenerated by the commands below.
+
+---
+
+## Command-line workflow
+
+```powershell
+# 1. Data: parse, QC, ontology, propagated labels (CSR), vocabularies, GO edges, cluster split
+uv run python scripts/prepare_data.py --config configs/baseline.yaml
+
+# 2. Frozen ESM-2 embeddings (640-d) for train / valid / test (resumable cache)
+uv run python scripts/extract_embeddings.py --config configs/baseline.yaml --split all
+#    optional: throughput / VRAM benchmark on 500 sequences
+uv run python scripts/extract_embeddings.py --config configs/baseline.yaml --benchmark 500
+
+# 3. Train (one model per aspect; --aspect all trains F, P, C in turn)
+uv run python scripts/train.py --config configs/baseline.yaml --aspect F
+
+# 4. Predict + export (all three aspect checkpoints of the experiment by default)
+uv run python scripts/predict.py --config configs/baseline.yaml --input validation
+uv run python scripts/predict.py --config configs/baseline.yaml --input testsuperset
+
+# 5. Evaluate validation predictions (internal Fmax / IA-weighted Fmax + official cafaeval on a subset)
+uv run python scripts/evaluate.py --config configs/baseline.yaml --predictions predictions/baseline_val.tsv
+
+# 6. Everything above for one experiment (skips steps whose outputs exist; --force to redo)
+uv run python scripts/run_pipeline.py --config configs/baseline.yaml
+
+# Compare experiments -> results/experiment_table.md
+uv run python scripts/compare_experiments.py
+```
+
+Steps 1–2 are shared by all experiments (they only depend on the `data`/`model` sections).
+Any config value can be overridden from the CLI, e.g. a λ sweep:
+
+```powershell
+uv run python scripts/train.py --config configs/hierarchical.yaml --aspect all --name hier_l1.0 --set loss.hierarchical_lambda=1.0
+```
+
+Smoke run on a subset (separate directories so real artifacts are untouched):
+
+```powershell
+uv run python scripts/run_pipeline.py --config configs/baseline.yaml --set data.subset=3000 --set data.processed_dir=data/smoke/processed --set data.embedding_dir=data/smoke/embeddings --set experiment_name=smoke
 ```
 
 ---
 
-## Setup & Installation
+## Method summary
 
-```bash
-pip install -r requirements.txt
-```
+**Data (plan §3–5).** Canonical protein order = FASTA order; every artifact carries IDs or a hash
+manifest. GO terms are resolved through `alt_id` and single `replaced_by` links (otherwise dropped and
+logged). Labels are propagated to same-aspect ancestors via **is_a + part_of** (the CAFA evaluator
+convention; `regulates` edges are not propagated). Vocabularies are sorted GO IDs of terms seen in the
+**train split**, with no frequency cut-off. Edges are stored parent→child (`go_edges[:,0]=parent`).
 
-### Dataset Preparation (`data/raw/`)
-Download the official **CAFA 5** dataset and place the raw files into `data/raw/`:
-- `train_sequences.fasta`
-- `train_terms.tsv`
-- `train_taxonomy.tsv`
-- `go-basic.obo`
-- `testsuperset.fasta`
-- `IA.txt`
-- `sample_submission.csv` (or `.tsv`)
+**Split.** Cluster-based: MMseqs2 if available, otherwise MinHash-LSH on 5-mer sets (64 hashes,
+16×4 bands, union-find), exact duplicates always grouped. 80/20 split; leakage audit checks ID,
+exact-sequence and cluster overlap (all 0). See limitations below.
 
-> **Note:** Large raw data files, cached embeddings, checkpoints, and prediction outputs are excluded from Git via `.gitignore`.
+**Embeddings (plan §6).** `facebook/esm2_t30_150M_UR50D`, frozen, fp16; mean over residue tokens only.
+Sequences > 1022 residues use overlapping 1022-residue windows (overlap 256) averaged by residue count.
+Cache keyed by sequence hash (duplicates and train/test overlaps embedded once).
 
----
+**Model / training (plan §7–9).** `Linear(640[+64], 512) → ReLU → Dropout(0.3) → Linear(512, K)`,
+raw logits, `BCEWithLogitsLoss`, AdamW (lr 1e-3, wd 1e-4), batch 256, ≤20 epochs, early stopping
+(patience 4) on validation Fmax. Hierarchical penalty on sigmoid probabilities over all parent→child
+edges of the aspect. Taxonomy vocabulary is built from the train split only; unseen/missing → UNK (0).
 
-## Command-Line Workflow
+**Evaluation (plan §12).** Protein-centric precision/recall/F1 at τ ∈ {0.01,…,0.99}; Fmax and
+IA-weighted Fmax (IA from `IA.txt`). Three clearly labelled protocols:
+1. *model selection* — vocabulary-restricted Fmax inside the trainer;
+2. *internal validation* — file-based, against the full propagated validation truth, predictions
+   max-propagated (as `cafaeval` does);
+3. *cafaeval* — the official CAFA evaluator package on a random validation subset (cross-check).
 
-```bash
-# 1. Prepare dataset, ontology vocabularies, propagated labels, and train/val split
-python scripts/prepare_data.py --config configs/baseline.yaml
+None of these is an official CAFA 5 score (that needs the post-deadline temporal ground truth).
 
-# 2. Extract frozen ESM-2 residue-pooled embeddings (640d)
-python scripts/extract_embeddings.py --config configs/baseline.yaml --split all
-
-# 3. Train model (run per aspect: F, P, C)
-python scripts/train.py --config configs/baseline.yaml --aspect F
-
-# 4. Run inference & export predictions
-python scripts/predict.py --config configs/baseline.yaml --checkpoint checkpoints/baseline_F_best.pt --input testsuperset
-
-# 5. Evaluate predictions
-python scripts/evaluate.py --config configs/baseline.yaml --predictions predictions/baseline_val.csv --split validation
-
-# 6. Run full end-to-end pipeline
-python scripts/run_pipeline.py --config configs/baseline.yaml
-```
+**Export.** `protein<TAB>GO<TAB>score` without header (as `sample_submission.tsv`), scores ≥ 0.01,
+≤ 450/750/300 MF/BP/CC terms per protein (CAFA limit 1,500), every target protein present; validated by
+reading the file back.
 
 ---
 
-## Running Tests
+## Limitations
 
-```bash
-pytest tests/
+- **Positive–unlabelled labels:** unannotated terms are treated as negatives in BCE; absence of an
+  annotation is not evidence of absence of function.
+- **Split:** MinHash-LSH approximates a high-identity clustering, not a 30%-identity MMseqs2
+  clustering, so remote homologs can still be on both sides → validation scores are optimistic
+  relative to a strict homology split or CAFA's temporal split.
+- **Taxonomy shortcut risk:** most validation taxa are seen in training (~1.4% unseen), so taxonomy
+  gains may partly reflect species-level label priors.
+- **Long sequences:** window averaging loses long-range context beyond 1022 residues.
+- **Single seed** per experiment; differences smaller than seed-to-seed variance are not meaningful.
+- **Not an official CAFA score:** see Evaluation above.
+
+---
+
+## Repository structure
+
+```text
+configs/            baseline / hierarchical / taxonomy / combined YAML (identical except 2 switches)
+src/data/           preprocessing, ontology, split, taxonomy, dataset, pipeline (prepare_data), artifacts
+src/models/         esm_encoder, classifier, hierarchical_loss, taxonomy_encoder, fusion
+src/training/       trainer (fit), train (per-aspect runner)
+src/evaluation/     metrics (Fmax), predict, export_cafa, evaluate_cafa (internal + cafaeval)
+src/utils/          config (+overrides, hashing), seed, logger, io (atomic JSON, hashes)
+scripts/            prepare_data, extract_embeddings, train, predict, evaluate, run_pipeline, compare_experiments
+tests/              unit tests + 300-protein end-to-end integration test
+data/processed/     protein_ids.json, sequences.jsonl, taxonomy_ids.npy, raw/propagated annotations,
+                    vocab_*.json, go_edges_*.npy, labels_*.npz, train/valid ids, split_manifest.json,
+                    qc_report.json, data_manifest.json
+data/embeddings/    embeddings_{train,valid,test}.npy (+ _ids.json), embedding_manifest.json, shards/
+checkpoints/        <exp>_<aspect>_best.pt
+predictions/        <exp>_val.tsv, <exp>_test.tsv
+results/            per-experiment histories, learning curves, eval JSON; experiment_table.md; REPORT.md
+```
+
+## Tests
+
+```powershell
+uv run pytest
 ```

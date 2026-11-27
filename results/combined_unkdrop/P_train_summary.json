@@ -1,0 +1,33 @@
+{
+  "experiment": "combined_unkdrop",
+  "aspect": "P",
+  "best_epoch": 132,
+  "epochs_run": 142,
+  "val_metrics_at_best": {
+    "epoch": 132,
+    "train_loss": 0.004592126887130541,
+    "train_bce_loss": 0.004568584556578559,
+    "train_hier_loss": 2.3542335329190216e-05,
+    "val_loss": 0.006575886884497272,
+    "val_fmax": 0.4636151798964043,
+    "val_precision": 0.481361889098706,
+    "val_recall": 0.4471305034003438,
+    "val_best_threshold": 0.23000000417232513,
+    "val_violation_rate": 0.21409270995155705,
+    "val_violation_rate_gt001": 0.0006972594025962878,
+    "val_mean_violation_mag": 4.04709312534861e-05,
+    "val_wfmax": 0.39956972038561667,
+    "val_wfmax_threshold": 0.18000000715255737,
+    "train_time_sec": 5.08833384513855,
+    "epoch_time_sec": 9.806450843811035
+  },
+  "train_time_total_sec": 2439.675231695175,
+  "peak_gpu_mem_gb": 1.708395008,
+  "num_train": 73804,
+  "num_valid": 18406,
+  "K": 20584,
+  "checkpoint": "checkpoints\\combined_unkdrop_P_best.pt",
+  "config_hash": "3262e08b35b8a4f6",
+  "vocab_hash": "62537d34ba7e1f49",
+  "protocol": "internal_validation (vocab-restricted, model selection)"
+}

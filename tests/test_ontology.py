@@ -65,3 +65,42 @@ def test_ontology_parsing_propagation_and_edges(tmp_path: Path):
     assert dense.shape == (2, 3)
     assert dense[0].sum() == 3.0
     assert dense[1].sum() == 1.0
+
+
+ALT_OBO = SAMPLE_OBO + """
+[Term]
+id: GO:0005634
+name: nucleus
+namespace: cellular_component
+alt_id: GO:0000001
+relationship: part_of GO:0005575 ! cellular_component
+
+[Term]
+id: GO:0005575
+name: cellular_component
+namespace: cellular_component
+"""
+
+
+def test_alt_id_relation_types_and_idempotent_propagation(tmp_path: Path):
+    obo = tmp_path / "go.obo"
+    obo.write_text(ALT_OBO, encoding="utf-8")
+    onto = GOOntology()
+    onto.parse_obo(obo)
+    assert onto.resolve_term("GO:0000001") == "GO:0005634"
+    assert onto.resolve_term("GO:1234567") is None
+    vocab_c = onto.build_aspect_vocabulary("C")
+    edges, rels = onto.build_go_edges(vocab_c, "C", return_relations=True)
+    assert rels == ["part_of"]
+    assert (edges[0, 0], edges[0, 1]) == (vocab_c["GO:0005575"], vocab_c["GO:0005634"])  # parent, child
+    once = onto.propagate({"GO:0005515"})
+    assert onto.propagate(once) == once
+    assert onto.find_cycles() == 0
+
+
+def test_relation_policy_excludes_part_of_when_configured(tmp_path: Path):
+    obo = tmp_path / "go.obo"
+    obo.write_text(ALT_OBO, encoding="utf-8")
+    onto = GOOntology(allowed_relations=("is_a",))
+    onto.parse_obo(obo)
+    assert onto.get_ancestors("GO:0005634") == {"GO:0005634"}

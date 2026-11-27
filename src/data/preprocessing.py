@@ -87,8 +87,8 @@ def parse_annotations(tsv_path: Union[str, Path]) -> List[Tuple[str, str, str]]:
             parts = line.strip().split("\t")
             if not parts or len(parts) < 2:
                 continue
-            if idx == 0 and ("EntryID" in parts[0] or "protein" in parts[0].lower() or "term" in parts[1].lower()):
-                continue
+            if idx == 0 and not parts[1].strip().startswith("GO:"):
+                continue  # header row
             pid = parts[0].strip()
             go_id = parts[1].strip()
             aspect = parts[2].strip() if len(parts) > 2 else ""
@@ -98,6 +98,26 @@ def parse_annotations(tsv_path: Union[str, Path]) -> List[Tuple[str, str, str]]:
     return records
 
 
+def parse_fasta_header_field(fasta_path: Union[str, Path], field_index: int = 1) -> Dict[str, str]:
+    """Return {normalized_id: whitespace-separated header field ``field_index``}.
+
+    The CAFA 5 test superset stores the NCBI taxon ID in the header (``>Q9CQV8<TAB>10090``).
+    """
+    out: Dict[str, str] = {}
+    with open(fasta_path, "r", encoding="utf-8") as f:
+        for line in f:
+            if line.startswith(">"):
+                parts = line[1:].strip().split()
+                if len(parts) > field_index:
+                    out[normalize_protein_id(line)] = parts[field_index]
+    return out
+
+
 def prepare_data(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Contract entrypoint: orchestrate data ingestion, ontology, label matrices, and splits."""
-    raise NotImplementedError("Implement full pipeline orchestration in Day 1-3 according to data files.")
+    """Contract entrypoint: orchestrate data ingestion, ontology, label matrices, and splits.
+
+    Writes all artifacts to ``config['data']['processed_dir']`` (see ``src/data/pipeline.py``).
+    """
+    from src.data.pipeline import prepare_data as _prepare
+
+    return _prepare(config)
